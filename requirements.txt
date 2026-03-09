@@ -1,7 +1,5 @@
-faiss-cpu
-openai
+pinecone 
+pymongo
 python-dotenv
+openai
 streamlit
-chainlit
-tqdm
-numpy

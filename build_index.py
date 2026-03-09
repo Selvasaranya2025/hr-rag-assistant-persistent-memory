@@ -1,40 +1,54 @@
 # build_index.py
+from pinecone import Pinecone
+from rag.embedder import get_embeddings
+from rag.loader import load_and_chunk
 
 import os
-import pickle
-# Allow imports from project root
-from rag.loader import load_and_chunk
-from rag.embedder import get_embeddings
-from rag.vector_store import create_faiss_index, save_index
-from config import CHUNK_SIZE
-# Paths for saving index and chunks
-STORAGE_DIR = "storage"
-INDEX_PATH = os.path.join(STORAGE_DIR, "index.faiss")
-CHUNKS_PATH = os.path.join(STORAGE_DIR, "chunks.pkl")
 
-# This script loads documents, chunks them, creates embeddings, builds a FAISS index, and saves everything for later retrieval
-def main():
-    print("Loading and chunking documents...")
-    chunks = load_and_chunk(
-        chunk_size=CHUNK_SIZE,
-    )
-    # Extract the text content from the chunks to create embeddings
-    texts = [chunk["content"] for chunk in chunks]
-    # Create embeddings for the chunks using the embedding model
-    print(f"Creating embeddings for {len(texts)} chunks...")
-    embeddings = get_embeddings(texts)
-    # Build the FAISS index using the created embeddings
-    print("Building FAISS index...")
-    index = create_faiss_index(embeddings)
-    # Save the FAISS index and the chunks metadata for later retrieval
-    print("Saving index and chunks...")
-    save_index(index, INDEX_PATH)
-    # Save the chunks metadata (like content) separately since FAISS only stores vectors
-    with open(CHUNKS_PATH, "wb") as f:
-        pickle.dump(chunks, f)
-    # Print a success message after the index is built and saved successfully
-    print("Index built and saved successfully.")
+pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+index = pc.Index("hr-policy-index")
 
-# Run the script to build the index
-if __name__ == "__main__":
-    main()
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+file_path = os.path.join(BASE_DIR, "data", "COMPANY HR POLICY MANUAL.txt")
+
+print("Resolved file path:", file_path)
+print("Exists:", os.path.exists(file_path))
+
+chunks = load_and_chunk("data")
+
+print("Chunks length:", len(chunks))
+
+if len(chunks) == 0:
+    raise ValueError("No chunks created. Loader failed.")
+
+for i, chunk in enumerate(chunks[:3]):
+    print(f"Chunk {i} keys:", chunk.keys())
+    print(f"Chunk {i} content type:", type(chunk.get("content")))
+    print(f"Chunk {i} content preview:", str(chunk.get("content"))[:100])
+    print("-" * 50)
+
+texts = [chunk.get("content") for chunk in chunks]
+
+print("First text type:", type(texts[0]))
+
+embeddings = get_embeddings(texts)
+print("First embedding type:", type(embeddings[0]))
+print("First embedding length:", len(embeddings[0]))
+print("First embedding preview:", embeddings[0][:5])
+
+vectors = []
+
+for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+    vectors.append({
+        "id": f"chunk-{i}",
+        "values": embedding,
+        "metadata": {
+            "text": chunk["content"]
+        }
+    })
+
+print("Upserting vectors...")
+index.upsert(vectors=vectors)
+print("Upserted", len(vectors), "vectors successfully.")

@@ -5,22 +5,26 @@ from openai import OpenAI
 from config import CHAT_MODEL
 import streamlit as st
 # Initialize the OpenAI client with the API key from the configuration
-if "OPENAI_API_KEY" in st.secrets:
-    api_key = st.secrets["OPENAI_API_KEY"]
-else:
-    api_key = os.getenv("OPENAI_API_KEY")
+api_key = os.getenv("OPENAI_API_KEY")
+
+if not api_key:
+    raise ValueError("OPENAI_API_KEY is not set.")
 
 client = OpenAI(api_key=api_key)
-
 # Function to stream chat completions from the OpenAI API based on a user query and retrieved context
-def stream_chat_completion(query, context):
+def stream_chat_completion(query, context: str, history: str = ""):
     system_prompt = """You are an HR policy assistant.
 Answer the user's question strictly based on the provided context.
 If the answer is not found in the context, say:
 'I cannot find this information in the HR policy document.'"""
+#history first, then rag context, then user query. 
+# This way the LLM can use the history to understand the conversation flow and the context to find the answer, 
+# before seeing the new question.
+
 # Combine the system prompt, retrieved context, and user query into a single prompt for the LLM
     user_prompt = f"""
-Context:
+{history}
+HR Policy Document:
 {context}
 
 Question:
